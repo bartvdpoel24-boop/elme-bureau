@@ -1,4 +1,4 @@
-# Elme
+# TelMe
 
 Houd activiteiten bij per categorie.
 
@@ -7,4 +7,4 @@ Houd activiteiten bij per categorie.
 - **Jaar** — overzicht per maand
 - **Instellingen** — categorieën en activiteiten, elk met een naam en kleur
 
-Het log blijft in deze browser bewaard. Het voorbeeld (Sporten, Tennis, eGym) zet je terug via de knop onderaan.
+Log in met Google. Je log blijft dan in je account bewaard. Bij Instellingen importeer je een jaar als tekst: jaar, categorie, en per activiteit twaalf maandtotalen.

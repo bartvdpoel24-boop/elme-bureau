@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Elme";
+const APP_NAME = "TelMe";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -13,7 +13,7 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "Houd bij wat je doet: categorieën, activiteiten en hoe vaak.",
+        content: "Tel wat je doet. Het blijft staan, zodat je het later kunt vertellen.",
       },
       { name: "theme-color", content: "#234237" },
     ],

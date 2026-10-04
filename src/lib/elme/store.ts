@@ -10,6 +10,7 @@ import {
   type Entry,
   type SwatchId,
 } from "@/lib/elme/model";
+import { mergeImport, parseImport } from "@/lib/elme/import";
 
 export type View = "vandaag" | "inzicht" | "jaar" | "instellingen";
 
@@ -28,6 +29,8 @@ type ElmeState = {
   changeCount: (activityId: string, date: string, delta: number) => void;
   moveEntry: (id: string, date: string) => void;
   removeEntry: (id: string) => void;
+  replace: (snapshot: { categories: Category[]; activities: Activity[]; entries: Entry[] }) => void;
+  applyImport: (text: string) => { year: number; category: string; activities: number; total: number };
   reset: () => void;
 };
 
@@ -117,6 +120,22 @@ export const useElme = create<ElmeState>()(
           };
         }),
       removeEntry: (id) => set((state) => ({ entries: state.entries.filter((entry) => entry.id !== id) })),
+      replace: (snapshot) =>
+        set({
+          categories: snapshot.categories,
+          activities: snapshot.activities,
+          entries: snapshot.entries,
+        }),
+      applyImport: (text) => {
+        const plan = parseImport(text);
+        let total = 0;
+        set((state) => {
+          const next = mergeImport(state, plan);
+          total = next.total;
+          return { categories: next.categories, activities: next.activities, entries: next.entries };
+        });
+        return { year: plan.year, category: plan.categoryName, activities: plan.activities.length, total };
+      },
       reset: () =>
         set({
           categories: seedCategories(),

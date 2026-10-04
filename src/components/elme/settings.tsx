@@ -15,6 +15,10 @@ export function Settings() {
 
   const [name, setName] = useState("");
   const [color, setColor] = useState<SwatchId>("moss");
+  const [importText, setImportText] = useState("");
+  const [importNote, setImportNote] = useState("");
+  const [importError, setImportError] = useState("");
+  const applyImport = useElme((state) => state.applyImport);
 
   return (
     <div className="flex flex-col gap-6">
@@ -22,6 +26,49 @@ export function Settings() {
         <h2 className="font-display text-3xl">Instellingen</h2>
         <p className="text-muted">Een categorie groepeert activiteiten. Per dag tel je hoe vaak je een activiteit deed.</p>
       </div>
+
+      <form
+        className="flex flex-col gap-3 rounded-lg border border-line bg-paper p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setImportError("");
+          setImportNote("");
+          try {
+            const result = applyImport(importText);
+            setImportNote(
+              `${result.year} · ${result.category} · ${result.activities} activiteiten · ${result.total} keer verdeeld over het jaar.`,
+            );
+            setImportText("");
+          } catch (error) {
+            setImportError(error instanceof Error ? error.message : "Importeren lukte niet.");
+          }
+        }}
+      >
+        <h3 className="font-display text-2xl">Importeren</h3>
+        <p className="text-sm text-muted">
+          Eerste regel het jaar, tweede de categorie, daarna per activiteit twaalf maandtotalen. Die worden
+          gelijkmatig op willekeurige dagen in de maand gezet. Een import vervangt dat jaar voor dezelfde activiteiten.
+        </p>
+        <label className="block">
+          <span className="sr-only">Importtekst</span>
+          <textarea
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+            rows={8}
+            placeholder={"2025\nX\nN: 18,15,18,18,15,16,21,17,17,16,13,18\nMA: 6,9,5,7,7,10,3,10,12,7,7,8"}
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-sm"
+          />
+        </label>
+        {importError ? <p className="text-sm font-semibold text-copper">{importError}</p> : null}
+        {importNote ? <p className="text-sm font-semibold text-pine">{importNote}</p> : null}
+        <button
+          type="submit"
+          disabled={!importText.trim()}
+          className="h-11 rounded-lg bg-pine px-4 font-semibold text-paper disabled:opacity-40"
+        >
+          Importeren
+        </button>
+      </form>
 
       <form
         className="flex flex-col gap-3 rounded-lg border border-line bg-paper p-4"

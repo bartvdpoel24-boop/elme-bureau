@@ -11,8 +11,23 @@ const SWATCH_BG: Record<SwatchId, string> = {
   dusk: "bg-dusk",
 };
 
+const SWATCH_TEXT: Record<SwatchId, string> = {
+  pine: "text-pine",
+  copper: "text-copper",
+  moss: "text-moss",
+  clay: "text-clay",
+  gold: "text-gold",
+  tide: "text-tide",
+  berry: "text-berry",
+  dusk: "text-dusk",
+};
+
 export function swatchBg(id: SwatchId): string {
   return SWATCH_BG[id];
+}
+
+export function swatchText(id: SwatchId): string {
+  return SWATCH_TEXT[id];
 }
 
 export function swatchFill(id: SwatchId): string {

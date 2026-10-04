@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { monthDays, shortMonth, weekDays, yearMonths } from "@/lib/elme/dates";
-import { isoDate, amount, type Activity, type SwatchId } from "@/lib/elme/model";
+import { isoDate, amount, type Activity, type Category, type SwatchId } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
-import { swatchBg, swatchFill } from "@/components/elme/swatches";
+import { swatchBg, swatchFill, swatchText } from "@/components/elme/swatches";
 
-type Row = { label: string } & Record<string, number | string>;
+type Row = { label: string; iso: string } & Record<string, number | string | null>;
 
 export function Insights({ today }: { today: string }) {
   const categories = useElme((state) => state.categories);
@@ -15,10 +15,11 @@ export function Insights({ today }: { today: string }) {
   const anchor = new Date(`${today}T12:00:00`);
   const active = focus !== "alle" && categories.some((category) => category.id === focus) ? focus : "alle";
   const shown = active === "alle" ? activities : activities.filter((activity) => activity.categoryId === active);
+  const lineCategories = categories.filter((category) => shown.some((activity) => activity.categoryId === category.id));
 
-  const week = build(weekDays(anchor), (day) => day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", ""), shown, entries);
-  const month = build(monthDays(anchor), (day) => String(day.getDate()), shown, entries);
-  const year = build(yearMonths(anchor.getFullYear()), (day) => shortMonth(day), shown, entries, "month");
+  const week = withAverages(build(weekDays(anchor), (day) => day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", ""), shown, entries), shown, lineCategories, today, "day");
+  const month = withAverages(build(monthDays(anchor), (day) => String(day.getDate()), shown, entries), shown, lineCategories, today, "day");
+  const year = withAverages(build(yearMonths(anchor.getFullYear()), (day) => shortMonth(day), shown, entries, "month"), shown, lineCategories, today, "month");
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,10 +44,10 @@ export function Insights({ today }: { today: string }) {
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <ChartCard title="Deze week" total={total(week, shown)} rows={week} activities={shown} />
-          <ChartCard title="Deze maand" total={total(month, shown)} rows={month} activities={shown} />
+          <ChartCard title="Deze week" total={total(week, shown)} rows={week} activities={shown} categories={lineCategories} />
+          <ChartCard title="Deze maand" total={total(month, shown)} rows={month} activities={shown} categories={lineCategories} />
           <div className="lg:col-span-2">
-            <ChartCard title="Dit jaar" total={total(year, shown)} rows={year} activities={shown} />
+            <ChartCard title="Dit jaar" total={total(year, shown)} rows={year} activities={shown} categories={lineCategories} />
           </div>
         </div>
       )}
@@ -63,7 +64,7 @@ function build(
 ): Row[] {
   return days.map((day) => {
     const key = isoDate(day);
-    const row: Row = { label: labelFor(day).replace(".", "") };
+    const row: Row = { label: labelFor(day).replace(".", ""), iso: key };
     for (const activity of activities) {
       row[activity.id] = entries
         .filter((entry) => {
@@ -76,6 +77,30 @@ function build(
   });
 }
 
+function withAverages(rows: Row[], activities: Activity[], categories: Category[], today: string, grain: "day" | "month"): Row[] {
+  const running = new Map(categories.map((category) => [category.id, 0]));
+  let seen = 0;
+  return rows.map((row) => {
+    const next: Row = { ...row };
+    const key = String(row.iso);
+    const future = grain === "month" ? key.slice(0, 7) > today.slice(0, 7) : key > today;
+    if (future) {
+      for (const category of categories) next[`avg:${category.id}`] = null;
+      return next;
+    }
+    seen += 1;
+    for (const category of categories) {
+      const bucket = activities
+        .filter((activity) => activity.categoryId === category.id)
+        .reduce((sum, activity) => sum + Number(row[activity.id] ?? 0), 0);
+      const soFar = (running.get(category.id) ?? 0) + bucket;
+      running.set(category.id, soFar);
+      next[`avg:${category.id}`] = Math.round((soFar / seen) * 10) / 10;
+    }
+    return next;
+  });
+}
+
 function total(rows: Row[], activities: Activity[]): number {
   return rows.reduce((sum, row) => sum + activities.reduce((inner, activity) => inner + Number(row[activity.id] ?? 0), 0), 0);
 }
@@ -85,11 +110,13 @@ function ChartCard({
   total: count,
   rows,
   activities,
+  categories,
 }: {
   title: string;
   total: number;
   rows: Row[];
   activities: Activity[];
+  categories: Category[];
 }) {
   const peak = Math.max(
     1,
@@ -104,7 +131,7 @@ function ChartCard({
       </div>
       <div className="h-56 min-w-0">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
+          <ComposedChart data={rows} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--color-line)" />
             <XAxis
               dataKey="label"
@@ -130,7 +157,13 @@ function ChartCard({
                 color: "var(--color-ink)",
               }}
               formatter={(value, _name, item) => {
-                const activity = activities.find((row) => row.id === item?.dataKey);
+                const key = String(item?.dataKey ?? "");
+                if (key.startsWith("avg:")) {
+                  const category = categories.find((row) => row.id === key.slice(4));
+                  const shown = typeof value === "number" ? value.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) : value;
+                  return [`${shown ?? 0}`, `Gemiddelde ${category?.name ?? ""}`];
+                }
+                const activity = activities.find((row) => row.id === key);
                 return [`${value ?? 0}×`, activity?.name ?? ""];
               }}
             />
@@ -144,7 +177,20 @@ function ChartCard({
                 maxBarSize={36}
               />
             ))}
-          </BarChart>
+            {categories.map((category) => (
+              <Line
+                key={category.id}
+                type="monotone"
+                dataKey={`avg:${category.id}`}
+                stroke={swatchFill(category.color)}
+                strokeDasharray="4 4"
+                strokeWidth={2}
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            ))}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
@@ -152,6 +198,12 @@ function ChartCard({
           <li key={activity.id} className="flex items-center gap-2">
             <span className={`size-3 rounded-full ${swatchBg(activity.color as SwatchId)}`} />
             {activity.name}
+          </li>
+        ))}
+        {categories.map((category) => (
+          <li key={`avg-${category.id}`} className={`flex items-center gap-2 ${swatchText(category.color)}`}>
+            <span className="inline-block w-5 border-t-2 border-dashed" />
+            Gemiddelde {category.name}
           </li>
         ))}
       </ul>
