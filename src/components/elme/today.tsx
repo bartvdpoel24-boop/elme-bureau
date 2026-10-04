@@ -218,17 +218,27 @@ function CategoryBlock({
 }
 
 function Empty({ onSettings }: { onSettings: () => void }) {
+  const loadDemo = useElme((state) => state.loadDemo);
   return (
     <div className="rounded-lg border border-line bg-paper p-6">
       <h2 className="font-display text-2xl">Nog geen categorieën</h2>
-      <p className="mt-2 text-muted">Maak eerst een categorie, en daaronder de activiteiten die je wilt tellen.</p>
-      <button
-        type="button"
-        onClick={onSettings}
-        className="mt-4 inline-flex h-11 items-center rounded-lg bg-pine px-4 font-semibold text-paper"
-      >
-        Naar instellingen
-      </button>
+      <p className="mt-2 text-muted">Maak een categorie met activiteiten, of laad de demo om te zien hoe tellen werkt.</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onSettings}
+          className="inline-flex h-11 items-center rounded-lg bg-pine px-4 font-semibold text-paper"
+        >
+          Naar instellingen
+        </button>
+        <button
+          type="button"
+          onClick={() => loadDemo()}
+          className="inline-flex h-11 items-center rounded-lg border border-line bg-canvas px-4 font-semibold"
+        >
+          Laad demo
+        </button>
+      </div>
     </div>
   );
 }

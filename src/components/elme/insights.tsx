@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { monthDays, shortMonth, weekDays, yearMonths } from "@/lib/elme/dates";
-import { isoDate, amount, type Activity, type Category, type SwatchId } from "@/lib/elme/model";
+import { isoDate, amount, targetForBucket, type Activity, type Category, type SwatchId } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { swatchBg, swatchFill, swatchText } from "@/components/elme/swatches";
 
@@ -17,15 +17,15 @@ export function Insights({ today }: { today: string }) {
   const shown = active === "alle" ? activities : activities.filter((activity) => activity.categoryId === active);
   const lineCategories = categories.filter((category) => shown.some((activity) => activity.categoryId === category.id));
 
-  const week = withAverages(build(weekDays(anchor), (day) => day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", ""), shown, entries), shown, lineCategories, today, "day");
-  const month = withAverages(build(monthDays(anchor), (day) => String(day.getDate()), shown, entries), shown, lineCategories, today, "day");
-  const year = withAverages(build(yearMonths(anchor.getFullYear()), (day) => shortMonth(day), shown, entries, "month"), shown, lineCategories, today, "month");
+  const week = withTargets(withAverages(build(weekDays(anchor), (day) => day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", ""), shown, entries), shown, lineCategories, today, "day"), shown, "day");
+  const month = withTargets(withAverages(build(monthDays(anchor), (day) => String(day.getDate()), shown, entries), shown, lineCategories, today, "day"), shown, "day");
+  const year = withTargets(withAverages(build(yearMonths(anchor.getFullYear()), (day) => shortMonth(day), shown, entries, "month"), shown, lineCategories, today, "month"), shown, "month");
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="font-display text-3xl">Hoe vaak</h2>
-        <p className="text-muted">Eén staaf per dag of maand. De hoogte is het totaal, de kleur de activiteit.</p>
+        <p className="text-muted">Eén staaf per dag of maand. Stippellijn is het gemiddelde, de vaste lijn je doel.</p>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Categorie">
         <FilterChip active={active === "alle"} onClick={() => setFocus("alle")}>
@@ -77,6 +77,16 @@ function build(
   });
 }
 
+function withTargets(rows: Row[], activities: Activity[], grain: "day" | "month"): Row[] {
+  return rows.map((row) => {
+    const next: Row = { ...row };
+    for (const activity of activities) {
+      next[`target:${activity.id}`] = targetForBucket(activity, String(row.iso), grain);
+    }
+    return next;
+  });
+}
+
 function withAverages(rows: Row[], activities: Activity[], categories: Category[], today: string, grain: "day" | "month"): Row[] {
   const running = new Map(categories.map((category) => [category.id, 0]));
   let seen = 0;
@@ -118,9 +128,14 @@ function ChartCard({
   activities: Activity[];
   categories: Category[];
 }) {
+  const aimed = activities.filter((activity) => (activity.targetCount ?? 0) > 0);
   const peak = Math.max(
     1,
-    ...rows.map((row) => activities.reduce((sum, activity) => sum + Number(row[activity.id] ?? 0), 0)),
+    ...rows.map((row) => {
+      const stack = activities.reduce((sum, activity) => sum + Number(row[activity.id] ?? 0), 0);
+      const goal = aimed.reduce((max, activity) => Math.max(max, Number(row[`target:${activity.id}`] ?? 0)), 0);
+      return Math.max(stack, goal);
+    }),
   );
   const yMax = peak <= 1 ? 1 : Math.ceil(peak * 1.25);
   return (
@@ -163,6 +178,11 @@ function ChartCard({
                   const shown = typeof value === "number" ? value.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) : value;
                   return [`${shown ?? 0}`, `Gemiddelde ${category?.name ?? ""}`];
                 }
+                if (key.startsWith("target:")) {
+                  const activity = activities.find((row) => row.id === key.slice(7));
+                  const shown = typeof value === "number" ? value.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) : value;
+                  return [`${shown ?? 0}`, `Doel ${activity?.name ?? ""}`];
+                }
                 const activity = activities.find((row) => row.id === key);
                 return [`${value ?? 0}×`, activity?.name ?? ""];
               }}
@@ -175,6 +195,18 @@ function ChartCard({
                 fill={swatchFill(activity.color)}
                 radius={index === activities.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
                 maxBarSize={36}
+              />
+            ))}
+            {aimed.map((activity) => (
+              <Line
+                key={`target-${activity.id}`}
+                type="monotone"
+                dataKey={`target:${activity.id}`}
+                stroke={swatchFill(activity.color)}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+                isAnimationActive={false}
               />
             ))}
             {categories.map((category) => (
@@ -198,6 +230,12 @@ function ChartCard({
           <li key={activity.id} className="flex items-center gap-2">
             <span className={`size-3 rounded-full ${swatchBg(activity.color as SwatchId)}`} />
             {activity.name}
+          </li>
+        ))}
+        {aimed.map((activity) => (
+          <li key={`target-${activity.id}`} className={`flex items-center gap-2 ${swatchText(activity.color)}`}>
+            <span className="inline-block w-5 border-t-2" />
+            Doel {activity.name}
           </li>
         ))}
         {categories.map((category) => (

@@ -5,8 +5,9 @@ import { Settings as SettingsView } from "@/components/elme/settings";
 import { SignInCard } from "@/components/elme/sign-in";
 import { Today } from "@/components/elme/today";
 import { YearView } from "@/components/elme/year";
+import { FeedbackButton } from "@/components/elme/feedback";
 import { loadLog, saveLog, type LogSnapshot } from "@/lib/elme/api";
-import { seedActivities, seedCategories, seedEntries, isoDate } from "@/lib/elme/model";
+import { isoDate } from "@/lib/elme/model";
 import { useElme, type View } from "@/lib/elme/store";
 import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -19,6 +20,7 @@ const VIEWS: { id: View; label: string; icon: typeof CheckCheck }[] = [
 ];
 
 const OWNER_KEY = "elme-cloud-user";
+const GUEST_KEY = "telme-guest";
 
 function snapshot(state: { categories: LogSnapshot["categories"]; activities: LogSnapshot["activities"]; entries: LogSnapshot["entries"] }): LogSnapshot {
   return {
@@ -28,12 +30,59 @@ function snapshot(state: { categories: LogSnapshot["categories"]; activities: Lo
   };
 }
 
+const emptyLog: LogSnapshot = { categories: [], activities: [], entries: [] };
+
 export function ElmeApp() {
   const { user, isPending } = useCurrentUserState();
   const [ready, setReady] = useState(false);
+  const [guest, setGuest] = useState(false);
+  const [bootChecked, setBootChecked] = useState(false);
   const [cloudNote, setCloudNote] = useState("Je log wordt in je account bewaard.");
 
   const userId = user?.id;
+
+  useEffect(() => {
+    if (isPending) return;
+    if (userId) {
+      window.localStorage.removeItem(GUEST_KEY);
+      setGuest(false);
+      setBootChecked(true);
+      return;
+    }
+    const flag = window.localStorage.getItem(GUEST_KEY);
+    if (flag !== "1" && flag !== "demo") {
+      setGuest(false);
+      setBootChecked(true);
+      return;
+    }
+    let cancel = false;
+    void (async () => {
+      if (!useElme.persist.hasHydrated()) await useElme.persist.rehydrate();
+      if (cancel) return;
+      if (flag === "demo") useElme.getState().loadDemo();
+      window.localStorage.setItem(GUEST_KEY, "1");
+      setGuest(true);
+      setCloudNote("Alleen in deze browser. Log in om het in de cloud te bewaren.");
+      setBootChecked(true);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [isPending, userId]);
+
+  async function begin(kind: "local" | "demo") {
+    if (!useElme.persist.hasHydrated()) await useElme.persist.rehydrate();
+    if (kind === "demo") useElme.getState().loadDemo();
+    window.localStorage.setItem(GUEST_KEY, "1");
+    setGuest(true);
+    setCloudNote("Alleen in deze browser. Log in om het in de cloud te bewaren.");
+    setBootChecked(true);
+  }
+
+  function leaveGuest() {
+    window.localStorage.removeItem(GUEST_KEY);
+    setGuest(false);
+  }
 
   useEffect(() => {
     if (isPending) return;
@@ -50,9 +99,8 @@ export function ElmeApp() {
       const owner = window.localStorage.getItem(OWNER_KEY);
       const empty = remote.categories.length === 0 && remote.activities.length === 0 && remote.entries.length === 0;
       if (empty && owner && owner !== userId) {
-        const fresh = { categories: seedCategories(), activities: seedActivities(), entries: seedEntries() };
-        useElme.getState().replace(fresh);
-        await saveLog({ data: fresh });
+        useElme.getState().replace(emptyLog);
+        await saveLog({ data: emptyLog });
       } else if (empty) {
         await saveLog({ data: snapshot(useElme.getState()) });
       } else {
@@ -94,6 +142,7 @@ export function ElmeApp() {
   }, [ready, userId]);
 
   const today = isoDate(new Date());
+  const showDesk = Boolean(user && ready) || (guest && !user);
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
@@ -108,17 +157,22 @@ export function ElmeApp() {
             <div className="rounded-lg bg-paper px-2 py-1 text-ink">
               <UserButton />
             </div>
+          ) : guest ? (
+            <button type="button" onClick={leaveGuest} className="h-11 rounded-lg bg-paper px-4 font-semibold text-ink">
+              Inloggen
+            </button>
           ) : null}
+          <FeedbackButton />
         </div>
       </header>
-      {isPending ? <Loading /> : null}
-      {!isPending && !user ? (
+      {!bootChecked || isPending ? <Loading /> : null}
+      {bootChecked && !isPending && !user && !guest ? (
         <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-          <SignInCard />
+          <SignInCard onLocal={() => void begin("local")} onDemo={() => void begin("demo")} />
         </main>
       ) : null}
-      {!isPending && user && !ready ? <Loading /> : null}
-      {!isPending && user && ready ? <Desk today={today} cloudNote={cloudNote} /> : null}
+      {bootChecked && !isPending && user && !ready ? <Loading /> : null}
+      {bootChecked && !isPending && showDesk ? <Desk today={today} cloudNote={cloudNote} /> : null}
     </div>
   );
 }
@@ -135,7 +189,8 @@ function Loading() {
 function Desk({ today, cloudNote }: { today: string; cloudNote: string }) {
   const view = useElme((state) => state.view);
   const setView = useElme((state) => state.setView);
-  const reset = useElme((state) => state.reset);
+  const loadDemo = useElme((state) => state.loadDemo);
+  const clear = useElme((state) => state.clear);
 
   return (
     <>
@@ -170,9 +225,20 @@ function Desk({ today, cloudNote }: { today: string; cloudNote: string }) {
         {view === "instellingen" ? <SettingsView /> : null}
         <footer className="mt-8 flex flex-col gap-2 border-t border-line pt-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
           <p>{cloudNote}</p>
-          <button type="button" className="h-11 text-left font-semibold text-pine" onClick={() => reset()}>
-            Zet het voorbeeld terug
-          </button>
+          <div className="flex gap-4">
+            <button type="button" className="h-11 font-semibold text-pine" onClick={() => loadDemo()}>
+              Laad demo
+            </button>
+            <button
+              type="button"
+              className="h-11 font-semibold text-pine"
+              onClick={() => {
+                if (window.confirm("Alle categorieën en tellingen wissen?")) clear();
+              }}
+            >
+              Maak leeg
+            </button>
+          </div>
         </footer>
       </main>
     </>

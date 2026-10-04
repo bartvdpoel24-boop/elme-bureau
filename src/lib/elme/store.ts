@@ -9,6 +9,7 @@ import {
   type Category,
   type Entry,
   type SwatchId,
+  type TargetPeriod,
 } from "@/lib/elme/model";
 import { mergeImport, parseImport } from "@/lib/elme/import";
 
@@ -25,13 +26,15 @@ type ElmeState = {
   removeCategory: (id: string) => void;
   addActivity: (categoryId: string, name: string, color: SwatchId) => void;
   updateActivity: (id: string, name: string, color: SwatchId) => void;
+  setTarget: (id: string, count: number | null, period: TargetPeriod) => void;
   removeActivity: (id: string) => void;
   changeCount: (activityId: string, date: string, delta: number) => void;
   moveEntry: (id: string, date: string) => void;
   removeEntry: (id: string) => void;
   replace: (snapshot: { categories: Category[]; activities: Activity[]; entries: Entry[] }) => void;
   applyImport: (text: string) => { year: number; category: string; activities: number; total: number };
-  reset: () => void;
+  loadDemo: () => void;
+  clear: () => void;
 };
 
 function clean(name: string): string {
@@ -41,9 +44,9 @@ function clean(name: string): string {
 export const useElme = create<ElmeState>()(
   persist(
     (set) => ({
-      categories: seedCategories(),
-      activities: seedActivities(),
-      entries: seedEntries(),
+      categories: [],
+      activities: [],
+      entries: [],
       view: "vandaag",
       setView: (view) => set({ view }),
       addCategory: (name, color) => {
@@ -89,6 +92,19 @@ export const useElme = create<ElmeState>()(
           ),
         }));
       },
+      setTarget: (id, count, period) =>
+        set((state) => ({
+          activities: state.activities.map((activity) => {
+            if (activity.id !== id) return activity;
+            if (!count || count < 1) {
+              const next = { ...activity };
+              delete next.targetCount;
+              delete next.targetPeriod;
+              return next;
+            }
+            return { ...activity, targetCount: Math.min(999, Math.round(count)), targetPeriod: period };
+          }),
+        })),
       removeActivity: (id) =>
         set((state) => ({
           activities: state.activities.filter((activity) => activity.id !== id),
@@ -136,16 +152,17 @@ export const useElme = create<ElmeState>()(
         });
         return { year: plan.year, category: plan.categoryName, activities: plan.activities.length, total };
       },
-      reset: () =>
+      loadDemo: () =>
         set({
           categories: seedCategories(),
           activities: seedActivities(),
           entries: seedEntries(),
           view: "vandaag",
         }),
+      clear: () => set({ categories: [], activities: [], entries: [], view: "vandaag" }),
     }),
     {
-      name: "elme-log-v1",
+      name: "telme-log-v1",
       skipHydration: true,
       partialize: (state) => ({
         categories: state.categories,

@@ -19,11 +19,15 @@ export type Category = {
   color: SwatchId;
 };
 
+export type TargetPeriod = "day" | "week" | "month";
+
 export type Activity = {
   id: string;
   categoryId: string;
   name: string;
   color: SwatchId;
+  targetCount?: number;
+  targetPeriod?: TargetPeriod;
 };
 
 export type Entry = {
@@ -40,6 +44,27 @@ export function amount(entry: { count?: number }): number {
 
 export function isSwatch(value: string): value is SwatchId {
   return SWATCHES.some((swatch) => swatch.id === value);
+}
+
+export function isTargetPeriod(value: string): value is TargetPeriod {
+  return value === "day" || value === "week" || value === "month";
+}
+
+/** Doel omgerekend naar de staaf: een dag in week/maand, een maand in het jaar. */
+export function targetForBucket(activity: Activity, iso: string, grain: "day" | "month"): number | null {
+  const count = activity.targetCount;
+  const period = activity.targetPeriod;
+  if (!count || count <= 0 || !period) return null;
+  const [year, month] = iso.split("-").map(Number);
+  const days = new Date(year, month, 0).getDate();
+  if (grain === "day") {
+    if (period === "day") return count;
+    if (period === "week") return Math.round((count / 7) * 10) / 10;
+    return Math.round((count / days) * 10) / 10;
+  }
+  if (period === "month") return count;
+  if (period === "day") return count * days;
+  return Math.round(((count * days) / 7) * 10) / 10;
 }
 
 export function isoDate(date: Date): string {
@@ -83,8 +108,8 @@ export function seedCategories(): Category[] {
 
 export function seedActivities(): Activity[] {
   return [
-    { id: TENNIS, categoryId: SPORT, name: "Tennis", color: "copper" },
-    { id: EGYM, categoryId: SPORT, name: "eGym", color: "tide" },
+    { id: TENNIS, categoryId: SPORT, name: "Tennis", color: "copper", targetCount: 2, targetPeriod: "week" },
+    { id: EGYM, categoryId: SPORT, name: "eGym", color: "tide", targetCount: 4, targetPeriod: "week" },
   ];
 }
 

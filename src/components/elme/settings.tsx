@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { SwatchId } from "@/lib/elme/model";
+import type { SwatchId, TargetPeriod } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { SwatchPicker, swatchBg } from "@/components/elme/swatches";
 
@@ -11,6 +11,7 @@ export function Settings() {
   const removeCategory = useElme((state) => state.removeCategory);
   const addActivity = useElme((state) => state.addActivity);
   const updateActivity = useElme((state) => state.updateActivity);
+  const setTarget = useElme((state) => state.setTarget);
   const removeActivity = useElme((state) => state.removeActivity);
 
   const [name, setName] = useState("");
@@ -24,7 +25,7 @@ export function Settings() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-display text-3xl">Instellingen</h2>
-        <p className="text-muted">Een categorie groepeert activiteiten. Per dag tel je hoe vaak je een activiteit deed.</p>
+        <p className="text-muted">Een categorie groepeert activiteiten. Per activiteit kun je een doel zetten: dat wordt een lijn in de grafiek.</p>
       </div>
 
       <form
@@ -115,6 +116,7 @@ export function Settings() {
           onRemove={() => removeCategory(category.id)}
           onAddActivity={(activityName, activityColor) => addActivity(category.id, activityName, activityColor)}
           onSaveActivity={(id, activityName, activityColor) => updateActivity(id, activityName, activityColor)}
+          onTarget={setTarget}
           onRemoveActivity={removeActivity}
         />
       ))}
@@ -131,16 +133,18 @@ function CategoryCard({
   onRemove,
   onAddActivity,
   onSaveActivity,
+  onTarget,
   onRemoveActivity,
 }: {
   id: string;
   name: string;
   color: SwatchId;
-  activities: { id: string; name: string; color: SwatchId }[];
+  activities: { id: string; name: string; color: SwatchId; targetCount?: number; targetPeriod?: TargetPeriod }[];
   onSave: (name: string, color: SwatchId) => void;
   onRemove: () => void;
   onAddActivity: (name: string, color: SwatchId) => void;
   onSaveActivity: (id: string, name: string, color: SwatchId) => void;
+  onTarget: (id: string, count: number | null, period: TargetPeriod) => void;
   onRemoveActivity: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -223,7 +227,10 @@ function CategoryCard({
             id={`${id}-${activity.id}`}
             name={activity.name}
             color={activity.color}
+            targetCount={activity.targetCount}
+            targetPeriod={activity.targetPeriod ?? "week"}
             onSave={(nextName, nextColor) => onSaveActivity(activity.id, nextName, nextColor)}
+            onTarget={(count, period) => onTarget(activity.id, count, period)}
             onRemove={() => onRemoveActivity(activity.id)}
           />
         ))}
@@ -265,13 +272,19 @@ function ActivityRow({
   id,
   name,
   color,
+  targetCount,
+  targetPeriod,
   onSave,
+  onTarget,
   onRemove,
 }: {
   id: string;
   name: string;
   color: SwatchId;
+  targetCount?: number;
+  targetPeriod: TargetPeriod;
   onSave: (name: string, color: SwatchId) => void;
+  onTarget: (count: number | null, period: TargetPeriod) => void;
   onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -335,6 +348,37 @@ function ActivityRow({
         <button type="button" className="h-11 px-3 font-semibold text-copper" onClick={() => (confirm ? onRemove() : setConfirm(true))}>
           {confirm ? "Zeker wissen" : "Wis"}
         </button>
+      </div>
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+        <label className="text-sm font-semibold text-muted">
+          Doel
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={999}
+            value={targetCount ?? ""}
+            placeholder="—"
+            aria-label={`Doel voor ${name}`}
+            onChange={(event) => {
+              const raw = event.target.value;
+              onTarget(raw === "" ? null : Number(raw), targetPeriod);
+            }}
+            className="ml-2 h-11 w-20 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+          />
+        </label>
+        <label className="text-sm font-semibold text-muted">
+          <span className="sr-only">Periode van het doel voor {name}</span>
+          <select
+            value={targetPeriod}
+            onChange={(event) => onTarget(targetCount ?? null, event.target.value as TargetPeriod)}
+            className="h-11 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+          >
+            <option value="day">per dag</option>
+            <option value="week">per week</option>
+            <option value="month">per maand</option>
+          </select>
+        </label>
       </div>
     </li>
   );
