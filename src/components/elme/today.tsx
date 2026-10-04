@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { longDay, shiftDay } from "@/lib/elme/dates";
-import { isoDate, type Activity, type Category } from "@/lib/elme/model";
+import { amount, type Activity, type Category } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { swatchBg } from "@/components/elme/swatches";
 
@@ -9,7 +9,7 @@ export function Today({ today }: { today: string }) {
   const categories = useElme((state) => state.categories);
   const activities = useElme((state) => state.activities);
   const entries = useElme((state) => state.entries);
-  const toggleEntry = useElme((state) => state.toggleEntry);
+  const changeCount = useElme((state) => state.changeCount);
   const moveEntry = useElme((state) => state.moveEntry);
   const removeEntry = useElme((state) => state.removeEntry);
   const setView = useElme((state) => state.setView);
@@ -82,7 +82,7 @@ export function Today({ today }: { today: string }) {
             weekStart={weekStart}
             monthStart={monthStart}
             today={today}
-            onToggle={(activityId) => toggleEntry(activityId, selected)}
+            onChange={(activityId, delta) => changeCount(activityId, selected, delta)}
           />
         ))
       )}
@@ -90,7 +90,7 @@ export function Today({ today }: { today: string }) {
       <section className="rounded-lg border border-line bg-paper p-4">
         <h2 className="font-display text-2xl">Op deze dag</h2>
         {onDay.length === 0 ? (
-          <p className="mt-2 text-muted">Nog niets afgevinkt. Kies een activiteit hierboven.</p>
+          <p className="mt-2 text-muted">Nog niets genoteerd. Gebruik plus bij een activiteit.</p>
         ) : (
           <ul className="mt-3 flex flex-col gap-3">
             {onDay.map((entry) => {
@@ -100,7 +100,9 @@ export function Today({ today }: { today: string }) {
                 <li key={entry.id} className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-center">
                   <p className="flex min-w-0 flex-1 items-center gap-2 font-semibold">
                     <span className={`size-3 shrink-0 rounded-full ${swatchBg(activity.color)}`} />
-                    <span className="truncate">{activity.name}</span>
+                    <span className="truncate">
+                      {activity.name} · {amount(entry)}×
+                    </span>
                   </p>
                   <label className="block sm:w-48">
                     <span className="sr-only">Datum van {activity.name}</span>
@@ -139,16 +141,16 @@ function CategoryBlock({
   weekStart,
   monthStart,
   today,
-  onToggle,
+  onChange,
 }: {
   category: Category;
   activities: Activity[];
   selected: string;
-  entries: { activityId: string; date: string }[];
+  entries: { activityId: string; date: string; count?: number }[];
   weekStart: string;
   monthStart: string;
   today: string;
-  onToggle: (activityId: string) => void;
+  onChange: (activityId: string, delta: number) => void;
 }) {
   return (
     <section>
@@ -161,34 +163,51 @@ function CategoryBlock({
       ) : (
         <ul className="flex flex-col gap-2">
           {activities.map((activity) => {
-            const done = entries.some((entry) => entry.activityId === activity.id && entry.date === selected);
-            const week = entries.filter(
-              (entry) => entry.activityId === activity.id && entry.date >= weekStart && entry.date <= today,
-            ).length;
-            const month = entries.filter(
-              (entry) => entry.activityId === activity.id && entry.date >= monthStart && entry.date <= today,
-            ).length;
+            const count = entries
+              .filter((entry) => entry.activityId === activity.id && entry.date === selected)
+              .reduce((sum, entry) => sum + amount(entry), 0);
+            const week = entries
+              .filter((entry) => entry.activityId === activity.id && entry.date >= weekStart && entry.date <= today)
+              .reduce((sum, entry) => sum + amount(entry), 0);
+            const month = entries
+              .filter((entry) => entry.activityId === activity.id && entry.date >= monthStart && entry.date <= today)
+              .reduce((sum, entry) => sum + amount(entry), 0);
             return (
-              <li key={activity.id}>
-                <button
-                  type="button"
-                  aria-pressed={done}
-                  onClick={() => onToggle(activity.id)}
-                  className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${done ? "border-pine bg-pine-soft" : "border-line bg-paper"}`}
+              <li
+                key={activity.id}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-3 ${count > 0 ? "border-pine bg-pine-soft" : "border-line bg-paper"}`}
+              >
+                <span
+                  className={`flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${count > 0 ? `${swatchBg(activity.color)} text-paper` : "border border-line bg-canvas"}`}
                 >
-                  <span
-                    className={`flex size-11 shrink-0 items-center justify-center rounded-full ${done ? `${swatchBg(activity.color)} text-paper` : "border border-line bg-canvas"}`}
+                  {count > 0 ? count : ""}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-lg font-semibold">{activity.name}</span>
+                  <span className="block text-sm text-muted">
+                    Deze week {week}× · deze maand {month}×
+                  </span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`Minder ${activity.name}`}
+                    disabled={count === 0}
+                    onClick={() => onChange(activity.id, -1)}
+                    className="flex size-11 items-center justify-center rounded-lg border border-line bg-paper disabled:opacity-40"
                   >
-                    {done ? <Check className="size-5" /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-lg font-semibold">{activity.name}</span>
-                    <span className="block text-sm text-muted">
-                      Deze week {week}× · deze maand {month}×
-                    </span>
-                  </span>
-                  <span className="text-sm font-semibold text-pine">{done ? "Gedaan" : "Afvinken"}</span>
-                </button>
+                    <Minus className="size-5" />
+                  </button>
+                  <span className="w-8 text-center text-lg font-semibold">{count}</span>
+                  <button
+                    type="button"
+                    aria-label={`Meer ${activity.name}`}
+                    onClick={() => onChange(activity.id, 1)}
+                    className={`flex size-11 items-center justify-center rounded-lg text-paper ${swatchBg(activity.color)}`}
+                  >
+                    <Plus className="size-5" />
+                  </button>
+                </span>
               </li>
             );
           })}

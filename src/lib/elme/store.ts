@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
+  amount,
   seedActivities,
   seedCategories,
   seedEntries,
@@ -24,7 +25,7 @@ type ElmeState = {
   addActivity: (categoryId: string, name: string, color: SwatchId) => void;
   updateActivity: (id: string, name: string, color: SwatchId) => void;
   removeActivity: (id: string) => void;
-  toggleEntry: (activityId: string, date: string) => void;
+  changeCount: (activityId: string, date: string, delta: number) => void;
   moveEntry: (id: string, date: string) => void;
   removeEntry: (id: string) => void;
   reset: () => void;
@@ -90,11 +91,16 @@ export const useElme = create<ElmeState>()(
           activities: state.activities.filter((activity) => activity.id !== id),
           entries: state.entries.filter((entry) => entry.activityId !== id),
         })),
-      toggleEntry: (activityId, date) =>
+      changeCount: (activityId, date, delta) =>
         set((state) => {
           const existing = state.entries.find((entry) => entry.activityId === activityId && entry.date === date);
-          if (existing) return { entries: state.entries.filter((entry) => entry.id !== existing.id) };
-          return { entries: [{ id: crypto.randomUUID(), activityId, date }, ...state.entries] };
+          if (!existing) {
+            if (delta < 1) return state;
+            return { entries: [{ id: crypto.randomUUID(), activityId, date, count: delta }, ...state.entries] };
+          }
+          const count = amount(existing) + delta;
+          if (count <= 0) return { entries: state.entries.filter((entry) => entry.id !== existing.id) };
+          return { entries: state.entries.map((entry) => (entry.id === existing.id ? { ...entry, count } : entry)) };
         }),
       moveEntry: (id, date) =>
         set((state) => {
@@ -103,10 +109,11 @@ export const useElme = create<ElmeState>()(
           const clash = state.entries.find(
             (entry) => entry.id !== id && entry.activityId === current.activityId && entry.date === date,
           );
+          if (!clash) return { entries: state.entries.map((entry) => (entry.id === id ? { ...entry, date } : entry)) };
           return {
             entries: state.entries
-              .filter((entry) => entry.id !== clash?.id)
-              .map((entry) => (entry.id === id ? { ...entry, date } : entry)),
+              .filter((entry) => entry.id !== id)
+              .map((entry) => (entry.id === clash.id ? { ...entry, count: amount(entry) + amount(current) } : entry)),
           };
         }),
       removeEntry: (id) => set((state) => ({ entries: state.entries.filter((entry) => entry.id !== id) })),

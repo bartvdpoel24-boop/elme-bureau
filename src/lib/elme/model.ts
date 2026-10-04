@@ -30,7 +30,13 @@ export type Entry = {
   id: string;
   activityId: string;
   date: string;
+  count: number;
 };
+
+export function amount(entry: { count?: number }): number {
+  const value = entry.count ?? 1;
+  return value > 0 ? value : 0;
+}
 
 export function isSwatch(value: string): value is SwatchId {
   return SWATCHES.some((swatch) => swatch.id === value);
@@ -44,8 +50,32 @@ const SPORT = "cat-sport";
 const TENNIS = "act-tennis";
 const EGYM = "act-egym";
 
-const TENNIS_DAYS = [0, -2, -6, -13, -27, -55, -90, -140, -190, -250];
-const EGYM_DAYS = [-1, -3, -5, -11, -20, -40, -75, -110, -170, -230, -300];
+const TENNIS_DAYS: [number, number][] = [
+  [0, 2],
+  [-2, 1],
+  [-6, 1],
+  [-13, 2],
+  [-27, 1],
+  [-55, 1],
+  [-90, 2],
+  [-140, 1],
+  [-190, 1],
+  [-250, 1],
+];
+const EGYM_DAYS: [number, number][] = [
+  [0, 1],
+  [-1, 2],
+  [-3, 1],
+  [-5, 1],
+  [-11, 1],
+  [-20, 2],
+  [-40, 1],
+  [-75, 1],
+  [-110, 2],
+  [-170, 1],
+  [-230, 1],
+  [-300, 1],
+];
 
 export function seedCategories(): Category[] {
   return [{ id: SPORT, name: "Sporten", color: "moss" }];
@@ -60,12 +90,13 @@ export function seedActivities(): Activity[] {
 
 export function seedEntries(today = new Date()): Entry[] {
   const rows = [
-    ...TENNIS_DAYS.map((offset) => ({ activityId: TENNIS, offset })),
-    ...EGYM_DAYS.map((offset) => ({ activityId: EGYM, offset })),
+    ...TENNIS_DAYS.map(([offset, count]) => ({ activityId: TENNIS, offset, count })),
+    ...EGYM_DAYS.map(([offset, count]) => ({ activityId: EGYM, offset, count })),
   ];
   return rows.map((row) => ({
     id: `${row.activityId}${row.offset}`,
     activityId: row.activityId,
     date: isoDate(addDays(today, row.offset)),
+    count: row.count,
   }));
 }

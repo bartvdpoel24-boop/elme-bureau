@@ -1,18 +1,20 @@
 import { useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { monthDays, shortMonth, weekDays, yearMonths } from "@/lib/elme/dates";
-import { isoDate, type Activity, type SwatchId } from "@/lib/elme/model";
+import { isoDate, amount, type Activity, type SwatchId } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { swatchBg, swatchFill } from "@/components/elme/swatches";
 
 type Row = { label: string } & Record<string, number | string>;
 
 export function Insights({ today }: { today: string }) {
+  const categories = useElme((state) => state.categories);
   const activities = useElme((state) => state.activities);
   const entries = useElme((state) => state.entries);
   const [focus, setFocus] = useState("alle");
   const anchor = new Date(`${today}T12:00:00`);
-  const shown = focus === "alle" ? activities : activities.filter((activity) => activity.id === focus);
+  const active = focus !== "alle" && categories.some((category) => category.id === focus) ? focus : "alle";
+  const shown = active === "alle" ? activities : activities.filter((activity) => activity.categoryId === active);
 
   const week = build(weekDays(anchor), (day) => day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", ""), shown, entries);
   const month = build(monthDays(anchor), (day) => String(day.getDate()), shown, entries);
@@ -22,16 +24,16 @@ export function Insights({ today }: { today: string }) {
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="font-display text-3xl">Hoe vaak</h2>
-        <p className="text-muted">Deze week, deze maand en dit jaar. Elke afgevinkte dag telt één keer.</p>
+        <p className="text-muted">Eén staaf per dag of maand. De hoogte is het totaal, de kleur de activiteit.</p>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Activiteit">
-        <FilterChip active={focus === "alle"} onClick={() => setFocus("alle")}>
+      <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Categorie">
+        <FilterChip active={active === "alle"} onClick={() => setFocus("alle")}>
           Alles
         </FilterChip>
-        {activities.map((activity) => (
-          <FilterChip key={activity.id} active={focus === activity.id} onClick={() => setFocus(activity.id)}>
-            <span className={`size-3 rounded-full ${swatchBg(activity.color)}`} />
-            {activity.name}
+        {categories.map((category) => (
+          <FilterChip key={category.id} active={active === category.id} onClick={() => setFocus(category.id)}>
+            <span className={`size-3 rounded-full ${swatchBg(category.color)}`} />
+            {category.name}
           </FilterChip>
         ))}
       </div>
@@ -56,17 +58,19 @@ function build(
   days: Date[],
   labelFor: (day: Date) => string,
   activities: Activity[],
-  entries: { activityId: string; date: string }[],
+  entries: { activityId: string; date: string; count?: number }[],
   grain: "day" | "month" = "day",
 ): Row[] {
   return days.map((day) => {
     const key = isoDate(day);
     const row: Row = { label: labelFor(day).replace(".", "") };
     for (const activity of activities) {
-      row[activity.id] = entries.filter((entry) => {
-        if (entry.activityId !== activity.id) return false;
-        return grain === "month" ? entry.date.slice(0, 7) === key.slice(0, 7) : entry.date === key;
-      }).length;
+      row[activity.id] = entries
+        .filter((entry) => {
+          if (entry.activityId !== activity.id) return false;
+          return grain === "month" ? entry.date.slice(0, 7) === key.slice(0, 7) : entry.date === key;
+        })
+        .reduce((sum, entry) => sum + amount(entry), 0);
     }
     return row;
   });
@@ -87,7 +91,10 @@ function ChartCard({
   rows: Row[];
   activities: Activity[];
 }) {
-  const peak = Math.max(1, ...rows.flatMap((row) => activities.map((activity) => Number(row[activity.id] ?? 0))));
+  const peak = Math.max(
+    1,
+    ...rows.map((row) => activities.reduce((sum, activity) => sum + Number(row[activity.id] ?? 0), 0)),
+  );
   const yMax = peak <= 1 ? 1 : Math.ceil(peak * 1.25);
   return (
     <section className="min-w-0 rounded-lg border border-line bg-paper p-4">
@@ -127,13 +134,14 @@ function ChartCard({
                 return [`${value ?? 0}×`, activity?.name ?? ""];
               }}
             />
-            {activities.map((activity) => (
+            {activities.map((activity, index) => (
               <Bar
                 key={activity.id}
                 dataKey={activity.id}
+                stackId="totaal"
                 fill={swatchFill(activity.color)}
-                radius={[4, 4, 0, 0]}
-                maxBarSize={28}
+                radius={index === activities.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                maxBarSize={36}
               />
             ))}
           </BarChart>

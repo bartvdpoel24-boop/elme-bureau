@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { mondayIndex, monthDays, monthName, yearMonths } from "@/lib/elme/dates";
-import { isoDate } from "@/lib/elme/model";
+import { amount, isoDate } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { swatchBg } from "@/components/elme/swatches";
 
@@ -20,7 +20,7 @@ export function YearView({ today }: { today: string }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="font-display text-3xl">Jaaroverzicht</h2>
-          <p className="text-muted">{inYear.length} afgevinkte dagen in {year}.</p>
+          <p className="text-muted">{inYear.reduce((sum, entry) => sum + amount(entry), 0)} keer in {year}.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -46,7 +46,9 @@ export function YearView({ today }: { today: string }) {
 
       <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
         {activities.map((activity) => {
-          const count = inYear.filter((entry) => entry.activityId === activity.id).length;
+          const count = inYear
+            .filter((entry) => entry.activityId === activity.id)
+            .reduce((sum, entry) => sum + amount(entry), 0);
           return (
             <li key={activity.id} className="flex items-center gap-2 font-semibold">
               <span className={`size-3 rounded-full ${swatchBg(activity.color)}`} />
@@ -79,7 +81,10 @@ export function YearView({ today }: { today: string }) {
                   const date = isoDate(day);
                   const logged = inYear.filter((entry) => entry.date === date);
                   const names = logged
-                    .map((entry) => activities.find((activity) => activity.id === entry.activityId)?.name)
+                    .map((entry) => {
+                      const name = activities.find((activity) => activity.id === entry.activityId)?.name;
+                      return name ? `${name} ${amount(entry)}×` : "";
+                    })
                     .filter(Boolean)
                     .join(", ");
                   return (
@@ -108,9 +113,9 @@ export function YearView({ today }: { today: string }) {
                     activities
                       .filter((activity) => activity.categoryId === category.id)
                       .map((activity) => {
-                        const count = inYear.filter(
-                          (entry) => entry.activityId === activity.id && entry.date.startsWith(key),
-                        ).length;
+                        const count = inYear
+                          .filter((entry) => entry.activityId === activity.id && entry.date.startsWith(key))
+                          .reduce((sum, entry) => sum + amount(entry), 0);
                         if (count === 0) return null;
                         return (
                           <li key={activity.id} className="flex items-center justify-between gap-2">

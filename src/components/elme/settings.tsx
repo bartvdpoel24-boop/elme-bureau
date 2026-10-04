@@ -20,7 +20,7 @@ export function Settings() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-display text-3xl">Instellingen</h2>
-        <p className="text-muted">Een categorie groepeert activiteiten. Elke activiteit kun je per dag afvinken.</p>
+        <p className="text-muted">Een categorie groepeert activiteiten. Per dag tel je hoe vaak je een activiteit deed.</p>
       </div>
 
       <form

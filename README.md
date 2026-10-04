@@ -2,8 +2,8 @@
 
 Houd activiteiten bij per categorie.
 
-- **Vandaag** — vink af wat je gedaan hebt, of kies een andere datum
-- **Inzicht** — hoe vaak deze week, deze maand en dit jaar
+- **Vandaag** — noteer per activiteit hoe vaak, of kies een andere datum
+- **Inzicht** — één staaf per dag of maand; de kleur toont de activiteit
 - **Jaar** — overzicht per maand
 - **Instellingen** — categorieën en activiteiten, elk met een naam en kleur
 
