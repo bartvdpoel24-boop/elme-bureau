@@ -150,7 +150,6 @@ export function ElmeApp() {
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-5 sm:px-6">
           <Mark />
           <div className="min-w-0 flex-1">
-            <p className="text-sm text-pine-soft">Tellen en vertellen</p>
             <h1 className="font-display text-4xl leading-none">TelMe</h1>
           </div>
           {user ? (
@@ -247,9 +246,10 @@ function Desk({ today, cloudNote }: { today: string; cloudNote: string }) {
 
 function Mark() {
   return (
-    <svg viewBox="0 0 32 32" className="size-11 text-pine" aria-hidden>
-      <rect width="32" height="32" rx="7" className="fill-paper" />
-      <path d="M6.5 7h19v4.6h-7.2V25h-4.6V11.6H6.5V7z" className="fill-pine" />
+    <svg viewBox="0 0 32 32" className="size-11" aria-hidden>
+      <rect width="32" height="32" rx="8" className="fill-paper" />
+      <path d="M5.2 6.1h21.6v5H19.3V26H12.7V11.1H5.2V6.1z" className="fill-pine" />
+      <path d="M20.5 14.2h2.1v9.2h-2.1zM23.4 16.6h2.1v6.8h-2.1zM26.3 19h2.1v4.4h-2.1z" className="fill-copper" />
     </svg>
   );
 }
