@@ -1,63 +1,131 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { seedJobs, type Job, type JobInput } from "@/lib/elme/model";
+import {
+  seedActivities,
+  seedCategories,
+  seedEntries,
+  type Activity,
+  type Category,
+  type Entry,
+  type SwatchId,
+} from "@/lib/elme/model";
 
-export type View = "overzicht" | "bord" | "team";
+export type View = "vandaag" | "inzicht" | "jaar" | "instellingen";
 
 type ElmeState = {
-  jobs: Job[];
+  categories: Category[];
+  activities: Activity[];
+  entries: Entry[];
   view: View;
-  query: string;
-  ownerFilter: string;
   setView: (view: View) => void;
-  setQuery: (query: string) => void;
-  setOwnerFilter: (ownerFilter: string) => void;
-  addJob: (input: JobInput) => void;
-  updateJob: (id: string, input: JobInput) => void;
-  moveJob: (id: string, direction: -1 | 1) => void;
-  removeJob: (id: string) => void;
+  addCategory: (name: string, color: SwatchId) => void;
+  updateCategory: (id: string, name: string, color: SwatchId) => void;
+  removeCategory: (id: string) => void;
+  addActivity: (categoryId: string, name: string, color: SwatchId) => void;
+  updateActivity: (id: string, name: string, color: SwatchId) => void;
+  removeActivity: (id: string) => void;
+  toggleEntry: (activityId: string, date: string) => void;
+  moveEntry: (id: string, date: string) => void;
+  removeEntry: (id: string) => void;
   reset: () => void;
 };
 
-const ORDER = ["nieuw", "bezig", "review", "klaar"] as const;
+function clean(name: string): string {
+  return name.trim().slice(0, 40);
+}
 
 export const useElme = create<ElmeState>()(
   persist(
     (set) => ({
-      jobs: seedJobs(),
-      view: "overzicht",
-      query: "",
-      ownerFilter: "alle",
+      categories: seedCategories(),
+      activities: seedActivities(),
+      entries: seedEntries(),
+      view: "vandaag",
       setView: (view) => set({ view }),
-      setQuery: (query) => set({ query }),
-      setOwnerFilter: (ownerFilter) => set({ ownerFilter }),
-      addJob: (input) =>
+      addCategory: (name, color) => {
+        const label = clean(name);
+        if (!label) return;
         set((state) => ({
-          jobs: [{ ...input, id: crypto.randomUUID() }, ...state.jobs],
-        })),
-      updateJob: (id, input) =>
+          categories: [...state.categories, { id: crypto.randomUUID(), name: label, color }],
+        }));
+      },
+      updateCategory: (id, name, color) => {
+        const label = clean(name);
+        if (!label) return;
         set((state) => ({
-          jobs: state.jobs.map((job) => (job.id === id ? { ...job, ...input, id } : job)),
-        })),
-      moveJob: (id, direction) =>
+          categories: state.categories.map((category) =>
+            category.id === id ? { ...category, name: label, color } : category,
+          ),
+        }));
+      },
+      removeCategory: (id) =>
+        set((state) => {
+          const activityIds = new Set(
+            state.activities.filter((activity) => activity.categoryId === id).map((activity) => activity.id),
+          );
+          return {
+            categories: state.categories.filter((category) => category.id !== id),
+            activities: state.activities.filter((activity) => activity.categoryId !== id),
+            entries: state.entries.filter((entry) => !activityIds.has(entry.activityId)),
+          };
+        }),
+      addActivity: (categoryId, name, color) => {
+        const label = clean(name);
+        if (!label) return;
         set((state) => ({
-          jobs: state.jobs.map((job) => {
-            if (job.id !== id) return job;
-            const index = ORDER.indexOf(job.status);
-            const next = ORDER[index + direction];
-            return next ? { ...job, status: next } : job;
-          }),
+          activities: [...state.activities, { id: crypto.randomUUID(), categoryId, name: label, color }],
+        }));
+      },
+      updateActivity: (id, name, color) => {
+        const label = clean(name);
+        if (!label) return;
+        set((state) => ({
+          activities: state.activities.map((activity) =>
+            activity.id === id ? { ...activity, name: label, color } : activity,
+          ),
+        }));
+      },
+      removeActivity: (id) =>
+        set((state) => ({
+          activities: state.activities.filter((activity) => activity.id !== id),
+          entries: state.entries.filter((entry) => entry.activityId !== id),
         })),
-      removeJob: (id) => set((state) => ({ jobs: state.jobs.filter((job) => job.id !== id) })),
-      reset: () => set({ jobs: seedJobs(), view: "overzicht", query: "", ownerFilter: "alle" }),
+      toggleEntry: (activityId, date) =>
+        set((state) => {
+          const existing = state.entries.find((entry) => entry.activityId === activityId && entry.date === date);
+          if (existing) return { entries: state.entries.filter((entry) => entry.id !== existing.id) };
+          return { entries: [{ id: crypto.randomUUID(), activityId, date }, ...state.entries] };
+        }),
+      moveEntry: (id, date) =>
+        set((state) => {
+          const current = state.entries.find((entry) => entry.id === id);
+          if (!current || current.date === date) return state;
+          const clash = state.entries.find(
+            (entry) => entry.id !== id && entry.activityId === current.activityId && entry.date === date,
+          );
+          return {
+            entries: state.entries
+              .filter((entry) => entry.id !== clash?.id)
+              .map((entry) => (entry.id === id ? { ...entry, date } : entry)),
+          };
+        }),
+      removeEntry: (id) => set((state) => ({ entries: state.entries.filter((entry) => entry.id !== id) })),
+      reset: () =>
+        set({
+          categories: seedCategories(),
+          activities: seedActivities(),
+          entries: seedEntries(),
+          view: "vandaag",
+        }),
     }),
     {
-      name: "elme-bureau-v1",
+      name: "elme-log-v1",
       skipHydration: true,
       partialize: (state) => ({
-        jobs: state.jobs,
+        categories: state.categories,
+        activities: state.activities,
+        entries: state.entries,
         view: state.view,
-        ownerFilter: state.ownerFilter,
       }),
     },
   ),

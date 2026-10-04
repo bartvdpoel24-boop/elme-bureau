@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Elme Bureau";
+const APP_NAME = "Elme";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -13,7 +13,7 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "Interne werktafel van Elme: opdrachten, bezetting en deze week.",
+        content: "Houd bij wat je doet: categorieën, activiteiten en hoe vaak.",
       },
       { name: "theme-color", content: "#234237" },
     ],

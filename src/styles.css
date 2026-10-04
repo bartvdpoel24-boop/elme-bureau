@@ -13,6 +13,12 @@
   --color-pine-soft: #e4ebe6;
   --color-copper: #9a3f12;
   --color-copper-soft: #f3e4d8;
+  --color-moss: #3f6b45;
+  --color-clay: #8d3d32;
+  --color-gold: #8a6420;
+  --color-tide: #1f6a78;
+  --color-berry: #8a3d5c;
+  --color-dusk: #3e4c59;
 }
 
 @layer base {

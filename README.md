@@ -1,14 +1,10 @@
-# Elme Bureau
+# Elme
 
-Interne werktafel voor Elme: opdrachten, teambezetting en de week.
+Houd activiteiten bij per categorie.
 
-- **Overzicht** — open werk, uren deze week en wie over capaciteit zit
-- **Bord** — kolommen Nieuw, Bezig, Review en Klaar
-- **Team** — weeklast per persoon
+- **Vandaag** — vink af wat je gedaan hebt, of kies een andere datum
+- **Inzicht** — hoe vaak deze week, deze maand en dit jaar
+- **Jaar** — overzicht per maand
+- **Instellingen** — categorieën en activiteiten, elk met een naam en kleur
 
-Opdrachten blijven in deze browser bewaard. Demodata zet je terug via de knop onderaan.
-
-```bash
-npm install
-npm run dev
-```
+Het log blijft in deze browser bewaard. Het voorbeeld (Sporten, Tennis, eGym) zet je terug via de knop onderaan.
