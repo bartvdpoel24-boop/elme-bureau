@@ -56,7 +56,7 @@ export function Settings() {
             value={importText}
             onChange={(event) => setImportText(event.target.value)}
             rows={8}
-            placeholder={"2025\nX\nN: 18,15,18,18,15,16,21,17,17,16,13,18\nMA: 6,9,5,7,7,10,3,10,12,7,7,8"}
+            placeholder={"2025\nSporten\nTennis: 18,15,18,18,15,16,21,17,17,16,13,18\neGym: 6,9,5,7,7,10,3,10,12,7,7,8"}
             className="w-full rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-sm"
           />
         </label>
