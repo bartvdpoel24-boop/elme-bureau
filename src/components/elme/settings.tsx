@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { Label, SwatchId, TargetPeriod } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
+import { backupLog, restoreLog } from "@/lib/elme/drive";
+import { redirectToLoginIfRequired } from "@/lib/app-data/login";
 import { SwatchPicker, swatchBg } from "@/components/elme/swatches";
 
 export function Settings() {
@@ -24,12 +26,71 @@ export function Settings() {
   const [importNote, setImportNote] = useState("");
   const [importError, setImportError] = useState("");
   const applyImport = useElme((state) => state.applyImport);
+  const replace = useElme((state) => state.replace);
+  const [driveNote, setDriveNote] = useState("");
+  const [driveError, setDriveError] = useState("");
+  const [driveBusy, setDriveBusy] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-display text-3xl">Instellingen</h2>
         <p className="text-muted">Een categorie groepeert activiteiten en labels. Per activiteit kun je een doel en een herinnering zetten.</p>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border border-line bg-paper p-4">
+        <h3 className="font-display text-2xl">Google Drive</h3>
+        <p className="text-sm text-muted">Zet een kopie van je log in Drive, of haal die kopie terug. Het bestand heet TelMe-backup.json.</p>
+        {driveError ? <p className="text-sm font-semibold text-copper">{driveError}</p> : null}
+        {driveNote ? <p className="text-sm font-semibold text-pine">{driveNote}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={driveBusy}
+            onClick={() => {
+              setDriveBusy(true);
+              setDriveError("");
+              setDriveNote("");
+              const snap = useElme.getState();
+              void backupLog({
+                data: { categories: snap.categories, activities: snap.activities, entries: snap.entries, labels: snap.labels },
+              })
+                .then((result) => {
+                  if (result.loginUrl) redirectToLoginIfRequired({ ok: false, data: null, loginRequired: true, loginUrl: result.loginUrl });
+                  if (result.ok) setDriveNote(result.message);
+                  else setDriveError(result.message);
+                })
+                .catch(() => setDriveError("Backup naar Google Drive lukte niet."))
+                .finally(() => setDriveBusy(false));
+            }}
+            className="h-11 rounded-lg bg-pine px-4 font-semibold text-paper disabled:opacity-40"
+          >
+            Backup naar Drive
+          </button>
+          <button
+            type="button"
+            disabled={driveBusy}
+            onClick={() => {
+              if (!window.confirm("De backup vervangt alles wat er nu staat. Doorgaan?")) return;
+              setDriveBusy(true);
+              setDriveError("");
+              setDriveNote("");
+              void restoreLog({ data: {} })
+                .then((result) => {
+                  if (result.loginUrl) redirectToLoginIfRequired({ ok: false, data: null, loginRequired: true, loginUrl: result.loginUrl });
+                  if (result.ok && result.data) {
+                    replace(result.data);
+                    setDriveNote(result.message);
+                  } else setDriveError(result.message);
+                })
+                .catch(() => setDriveError("Backup terugzetten lukte niet."))
+                .finally(() => setDriveBusy(false));
+            }}
+            className="h-11 rounded-lg border border-line px-4 font-semibold disabled:opacity-40"
+          >
+            Backup terugzetten
+          </button>
+        </div>
       </div>
 
       <form
@@ -210,7 +271,7 @@ function CategoryCard({
           </div>
         </form>
       ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3">
           <h3 className="flex items-center gap-2 font-display text-2xl">
             <span className={`size-3 rounded-full ${swatchBg(color)}`} />
             {name}
@@ -406,89 +467,93 @@ function ActivityRow({
   }
 
   return (
-    <li id={id} className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-center">
-      <p className="flex min-w-0 flex-1 items-center gap-2 font-semibold">
-        <span className={`size-3 shrink-0 rounded-full ${swatchBg(color)}`} />
-        <span className="truncate">{name}</span>
-      </p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          className="h-11 rounded-lg border border-line px-3 font-semibold"
-          onClick={() => {
-            setDraftName(name);
-            setDraftColor(color);
-            setEditing(true);
-            setConfirm(false);
-          }}
-        >
-          Wijzig
-        </button>
-        <button type="button" className="h-11 px-3 font-semibold text-copper" onClick={() => (confirm ? onRemove() : setConfirm(true))}>
-          {confirm ? "Zeker wissen" : "Wis"}
-        </button>
-      </div>
-      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-        <label className="text-sm font-semibold text-muted">
-          Doel
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={999}
-            value={targetCount ?? ""}
-            placeholder="—"
-            aria-label={`Doel voor ${name}`}
-            onChange={(event) => {
-              const raw = event.target.value;
-              onTarget(raw === "" ? null : Number(raw), targetPeriod);
+    <li id={id} className="flex flex-col gap-3 border-t border-line pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex min-w-0 flex-1 items-center gap-2 font-semibold">
+          <span className={`size-3 shrink-0 rounded-full ${swatchBg(color)}`} />
+          <span className="truncate">{name}</span>
+        </p>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            className="h-11 rounded-lg border border-line px-3 font-semibold"
+            onClick={() => {
+              setDraftName(name);
+              setDraftColor(color);
+              setEditing(true);
+              setConfirm(false);
             }}
-            className="ml-2 h-11 w-20 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
-          />
-        </label>
-        <label className="text-sm font-semibold text-muted">
-          <span className="sr-only">Periode van het doel voor {name}</span>
-          <select
-            value={targetPeriod}
-            onChange={(event) => onTarget(targetCount ?? null, event.target.value as TargetPeriod)}
-            className="h-11 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
           >
-            <option value="day">per dag</option>
-            <option value="week">per week</option>
-            <option value="month">per maand</option>
-          </select>
-        </label>
+            Wijzig
+          </button>
+          <button type="button" className="h-11 px-3 font-semibold text-copper" onClick={() => (confirm ? onRemove() : setConfirm(true))}>
+            {confirm ? "Zeker wissen" : "Wis"}
+          </button>
+        </div>
       </div>
-      <div className="flex w-full flex-wrap items-center gap-2">
-        <label className="text-sm font-semibold text-muted">
-          Herinnering na
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={999}
-            value={remindAfter ?? ""}
-            placeholder="—"
-            aria-label={`Herinnering voor ${name}`}
-            onChange={(event) => {
-              const raw = event.target.value;
-              onReminder(raw === "" ? null : Number(raw), remindPeriod);
-            }}
-            className="ml-2 h-11 w-20 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
-          />
-        </label>
-        <label className="text-sm font-semibold text-muted">
-          <span className="sr-only">Periode van de herinnering voor {name}</span>
-          <select
-            value={remindPeriod}
-            onChange={(event) => onReminder(remindAfter ?? null, event.target.value as TargetPeriod)}
-            className="h-11 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
-          >
-            <option value="day">dagen</option>
-            <option value="week">weken</option>
-            <option value="month">maanden</option>
-          </select>
-        </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm font-semibold text-muted">
+            Doel
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={999}
+              value={targetCount ?? ""}
+              placeholder="—"
+              aria-label={`Doel voor ${name}`}
+              onChange={(event) => {
+                const raw = event.target.value;
+                onTarget(raw === "" ? null : Number(raw), targetPeriod);
+              }}
+              className="ml-2 h-11 w-20 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+            />
+          </label>
+          <label className="text-sm font-semibold text-muted">
+            <span className="sr-only">Periode van het doel voor {name}</span>
+            <select
+              value={targetPeriod}
+              onChange={(event) => onTarget(targetCount ?? null, event.target.value as TargetPeriod)}
+              className="h-11 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+            >
+              <option value="day">per dag</option>
+              <option value="week">per week</option>
+              <option value="month">per maand</option>
+            </select>
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm font-semibold text-muted">
+            Herinnering na
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={999}
+              value={remindAfter ?? ""}
+              placeholder="—"
+              aria-label={`Herinnering voor ${name}`}
+              onChange={(event) => {
+                const raw = event.target.value;
+                onReminder(raw === "" ? null : Number(raw), remindPeriod);
+              }}
+              className="ml-2 h-11 w-20 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+            />
+          </label>
+          <label className="text-sm font-semibold text-muted">
+            <span className="sr-only">Periode van de herinnering voor {name}</span>
+            <select
+              value={remindPeriod}
+              onChange={(event) => onReminder(remindAfter ?? null, event.target.value as TargetPeriod)}
+              className="h-11 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+            >
+              <option value="day">dagen</option>
+              <option value="week">weken</option>
+              <option value="month">maanden</option>
+            </select>
+          </label>
+        </div>
       </div>
     </li>
   );

@@ -95,6 +95,10 @@ function asSnapshot(value: unknown): LogSnapshot {
   return { categories, activities, entries, labels };
 }
 
+export function parseLog(value: unknown): LogSnapshot {
+  return asSnapshot(value);
+}
+
 export const loadLog = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<LogSnapshot> => {

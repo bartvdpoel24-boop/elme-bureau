@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { monthDays, shortMonth, weekDays, yearMonths } from "@/lib/elme/dates";
+import { shortMonth, weekDays, yearMonths } from "@/lib/elme/dates";
 import { isoDate, amount, targetForBucket, type Activity, type Category, type SwatchId } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { swatchBg, swatchFill, swatchText } from "@/components/elme/swatches";
@@ -17,16 +17,16 @@ export function Insights({ today }: { today: string }) {
   const shown = active === "alle" ? activities : activities.filter((activity) => activity.categoryId === active);
   const lineCategories = categories.filter((category) => shown.some((activity) => activity.categoryId === category.id));
 
-  const week = withTargets(withAverages(build(weekDays(anchor), (day) => day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", ""), shown, entries), shown, lineCategories, today, "day"), shown, "day");
-  const month = withTargets(withAverages(build(monthDays(anchor), (day) => String(day.getDate()), shown, entries), shown, lineCategories, today, "day"), shown, "day");
   const year = withTargets(withAverages(build(yearMonths(anchor.getFullYear()), (day) => shortMonth(day), shown, entries, "month"), shown, lineCategories, today, "month"), shown, "month");
   const history = yearlyTotals(today, active === "alle" ? categories : [categories.find((category) => category.id === active)].filter((category): category is Category => Boolean(category)), shown, entries, active !== "alle");
+  const weekCategories = lineCategories;
+  const monthKey = today.slice(0, 7);
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="font-display text-3xl">Hoe vaak</h2>
-        <p className="text-muted">Eén staaf per dag of maand. Stippellijn is het gemiddelde, de vaste lijn je doel.</p>
+        <p className="text-muted">De week is een overzicht per dag. De maand telt per categorie. In de jaargrafieken is de stippellijn het gemiddelde en de vaste lijn je doel.</p>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Categorie">
         <FilterChip active={active === "alle"} onClick={() => setFocus("alle")}>
@@ -45,8 +45,8 @@ export function Insights({ today }: { today: string }) {
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <ChartCard title="Deze week" total={total(week, shown)} rows={week} activities={shown} categories={lineCategories} />
-          <ChartCard title="Deze maand" total={total(month, shown)} rows={month} activities={shown} categories={lineCategories} />
+          <WeekBoard today={today} anchor={anchor} categories={weekCategories} activities={shown} entries={entries} />
+          <MonthBoard monthKey={monthKey} categories={weekCategories} activities={shown} entries={entries} />
           <div className="lg:col-span-2">
             <ChartCard title="Dit jaar" total={total(year, shown)} rows={year} activities={shown} categories={lineCategories} />
           </div>
@@ -62,6 +62,173 @@ export function Insights({ today }: { today: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+function countIn(entries: { activityId: string; date: string; count?: number }[], activityId: string, matches: (date: string) => boolean): number {
+  return entries.filter((entry) => entry.activityId === activityId && matches(entry.date)).reduce((sum, entry) => sum + amount(entry), 0);
+}
+
+function WeekBoard({
+  today,
+  anchor,
+  categories,
+  activities,
+  entries,
+}: {
+  today: string;
+  anchor: Date;
+  categories: Category[];
+  activities: Activity[];
+  entries: { activityId: string; date: string; count?: number }[];
+}) {
+  const days = weekDays(anchor);
+  const weekTotal = activities.reduce(
+    (sum, activity) => sum + countIn(entries, activity.id, (date) => days.some((day) => isoDate(day) === date)),
+    0,
+  );
+  return (
+    <section className="min-w-0 rounded-lg border border-line bg-paper p-4">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h3 className="font-display text-2xl">Deze week</h3>
+        <p className="text-sm font-semibold text-pine">{weekTotal}×</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[36rem] border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="pb-2 text-left font-semibold text-muted">Activiteit</th>
+              {days.map((day) => {
+                const iso = isoDate(day);
+                const label = day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", "");
+                return (
+                  <th key={iso} className={`w-12 pb-2 text-center font-semibold capitalize ${iso === today ? "text-pine" : "text-muted"}`}>
+                    {label}
+                    <span className="mt-0.5 block text-xs font-normal">{day.getDate()}</span>
+                  </th>
+                );
+              })}
+              <th className="w-14 pb-2 text-right font-semibold text-muted">Totaal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map((category) => {
+              const rows = activities.filter((activity) => activity.categoryId === category.id);
+              if (rows.length === 0) return null;
+              return (
+                <CategoryWeekRows key={category.id} category={category} activities={rows} days={days} today={today} entries={entries} />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function CategoryWeekRows({
+  category,
+  activities,
+  days,
+  today,
+  entries,
+}: {
+  category: Category;
+  activities: Activity[];
+  days: Date[];
+  today: string;
+  entries: { activityId: string; date: string; count?: number }[];
+}) {
+  return (
+    <>
+      <tr>
+        <th colSpan={9} className="pt-3 pb-1 text-left font-display text-lg font-normal">
+          <span className="inline-flex items-center gap-2">
+            <span className={`size-3 rounded-full ${swatchBg(category.color)}`} />
+            {category.name}
+          </span>
+        </th>
+      </tr>
+      {activities.map((activity) => {
+        const counts = days.map((day) => countIn(entries, activity.id, (date) => date === isoDate(day)));
+        const sum = counts.reduce((total, value) => total + value, 0);
+        return (
+          <tr key={activity.id} className="border-t border-line">
+            <th className="py-2 pr-3 text-left font-semibold">
+              <span className="inline-flex items-center gap-2">
+                <span className={`size-2.5 rounded-full ${swatchBg(activity.color)}`} />
+                {activity.name}
+              </span>
+            </th>
+            {counts.map((value, index) => {
+              const iso = isoDate(days[index]);
+              return (
+                <td key={iso} className={`py-2 text-center tabular-nums ${iso === today ? "bg-pine-soft font-semibold" : ""}`}>
+                  {value > 0 ? value : <span className="text-line">·</span>}
+                </td>
+              );
+            })}
+            <td className="py-2 text-right font-semibold tabular-nums">{sum}×</td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+function MonthBoard({
+  monthKey,
+  categories,
+  activities,
+  entries,
+}: {
+  monthKey: string;
+  categories: Category[];
+  activities: Activity[];
+  entries: { activityId: string; date: string; count?: number }[];
+}) {
+  const rows = categories
+    .map((category) => {
+      const members = activities.filter((activity) => activity.categoryId === category.id);
+      const parts = members.map((activity) => ({
+        activity,
+        count: countIn(entries, activity.id, (date) => date.startsWith(monthKey)),
+      }));
+      return { category, parts, total: parts.reduce((sum, part) => sum + part.count, 0) };
+    })
+    .filter((row) => row.parts.length > 0);
+  const monthTotal = rows.reduce((sum, row) => sum + row.total, 0);
+  return (
+    <section className="min-w-0 rounded-lg border border-line bg-paper p-4">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h3 className="font-display text-2xl">Deze maand</h3>
+        <p className="text-sm font-semibold text-pine">{monthTotal}×</p>
+      </div>
+      <ul className="flex flex-col gap-4">
+        {rows.map((row) => (
+          <li key={row.category.id} className="border-t border-line pt-3 first:border-t-0 first:pt-0">
+            <div className="flex items-baseline justify-between gap-3">
+              <h4 className="flex items-center gap-2 font-display text-xl">
+                <span className={`size-3 rounded-full ${swatchBg(row.category.color)}`} />
+                {row.category.name}
+              </h4>
+              <p className="text-lg font-semibold tabular-nums">{row.total}×</p>
+            </div>
+            <ul className="mt-2 flex flex-col gap-1">
+              {row.parts.map((part) => (
+                <li key={part.activity.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className={`size-2.5 shrink-0 rounded-full ${swatchBg(part.activity.color)}`} />
+                    <span className="truncate">{part.activity.name}</span>
+                  </span>
+                  <span className="font-semibold tabular-nums text-muted">{part.count}×</span>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
