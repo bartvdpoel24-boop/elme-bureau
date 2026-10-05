@@ -20,6 +20,7 @@ export function Insights({ today }: { today: string }) {
   const week = withTargets(withAverages(build(weekDays(anchor), (day) => day.toLocaleDateString("nl-NL", { weekday: "short" }).replace(".", ""), shown, entries), shown, lineCategories, today, "day"), shown, "day");
   const month = withTargets(withAverages(build(monthDays(anchor), (day) => String(day.getDate()), shown, entries), shown, lineCategories, today, "day"), shown, "day");
   const year = withTargets(withAverages(build(yearMonths(anchor.getFullYear()), (day) => shortMonth(day), shown, entries, "month"), shown, lineCategories, today, "month"), shown, "month");
+  const history = yearlyTotals(today, active === "alle" ? categories : [categories.find((category) => category.id === active)].filter((category): category is Category => Boolean(category)), shown, entries, active !== "alle");
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,10 +50,55 @@ export function Insights({ today }: { today: string }) {
           <div className="lg:col-span-2">
             <ChartCard title="Dit jaar" total={total(year, shown)} rows={year} activities={shown} categories={lineCategories} />
           </div>
+          <div className="lg:col-span-2">
+            <ChartCard
+              title={history.title}
+              total={total(history.rows, history.series)}
+              rows={history.rows}
+              activities={history.series}
+              categories={[]}
+            />
+          </div>
         </div>
       )}
     </div>
   );
+}
+
+function yearlyTotals(today: string, categories: Category[], activities: Activity[], entries: { activityId: string; date: string; count?: number }[], byActivity: boolean): { title: string; rows: Row[]; series: Activity[] } {
+  const yearNow = Number(today.slice(0, 4));
+  const ids = new Set(activities.map((activity) => activity.id));
+  let first = yearNow;
+  for (const entry of entries) {
+    if (!ids.has(entry.activityId)) continue;
+    const year = Number(entry.date.slice(0, 4));
+    if (year >= 1970 && year < first) first = year;
+  }
+  if (yearNow - first > 24) first = yearNow - 24;
+  const years = Array.from({ length: yearNow - first + 1 }, (_, index) => first + index);
+  const series: Activity[] = byActivity
+    ? activities
+    : categories.map((category) => ({ id: category.id, categoryId: category.id, name: category.name, color: category.color }));
+  const rows = years.map((year) => {
+    const row: Row = { label: String(year), iso: `${year}-01-01` };
+    if (byActivity) {
+      for (const activity of activities) {
+        row[activity.id] = entries
+          .filter((entry) => entry.activityId === activity.id && entry.date.startsWith(`${year}-`))
+          .reduce((sum, entry) => sum + amount(entry), 0);
+      }
+    } else {
+      for (const category of categories) {
+        const members = new Set(activities.filter((activity) => activity.categoryId === category.id).map((activity) => activity.id));
+        row[category.id] = entries
+          .filter((entry) => members.has(entry.activityId) && entry.date.startsWith(`${year}-`))
+          .reduce((sum, entry) => sum + amount(entry), 0);
+      }
+    }
+    return row;
+  });
+  const title = byActivity && categories[0] ? `Totalen per jaar · ${categories[0].name}` : "Totalen per jaar";
+  return { title, rows, series };
 }
 
 function build(

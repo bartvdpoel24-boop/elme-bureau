@@ -1,4 +1,4 @@
-import { addDays, format } from "date-fns";
+import { addDays, addMonths, format, parseISO } from "date-fns";
 
 export const SWATCHES = [
   { id: "pine", label: "Dennen" },
@@ -19,6 +19,12 @@ export type Category = {
   color: SwatchId;
 };
 
+export type Label = {
+  id: string;
+  categoryId: string;
+  name: string;
+};
+
 export type TargetPeriod = "day" | "week" | "month";
 
 export type Activity = {
@@ -28,6 +34,8 @@ export type Activity = {
   color: SwatchId;
   targetCount?: number;
   targetPeriod?: TargetPeriod;
+  remindAfter?: number;
+  remindPeriod?: TargetPeriod;
 };
 
 export type Entry = {
@@ -35,6 +43,7 @@ export type Entry = {
   activityId: string;
   date: string;
   count: number;
+  labelIds?: string[];
 };
 
 export function amount(entry: { count?: number }): number {
@@ -71,9 +80,27 @@ export function isoDate(date: Date): string {
   return format(date, "yyyy-MM-dd");
 }
 
+/** Rode herinnering zodra de termijn sinds de laatste telling voorbij is. */
+export function reminderDue(activity: Activity, entries: { activityId: string; date: string }[], today: string): boolean {
+  const after = activity.remindAfter;
+  const period = activity.remindPeriod;
+  if (!after || after < 1 || !period || !isTargetPeriod(period)) return false;
+  let last = "";
+  for (const entry of entries) {
+    if (entry.activityId !== activity.id || entry.date > today) continue;
+    if (entry.date > last) last = entry.date;
+  }
+  if (!last) return false;
+  const start = parseISO(last);
+  const due = period === "month" ? addMonths(start, after) : addDays(start, period === "week" ? after * 7 : after);
+  return isoDate(due) <= today;
+}
+
 const SPORT = "cat-sport";
 const TENNIS = "act-tennis";
 const EGYM = "act-egym";
+const BUITEN = "lab-buiten";
+const WEDSTRIJD = "lab-wedstrijd";
 
 const TENNIS_DAYS: [number, number][] = [
   [0, 2],
@@ -108,8 +135,15 @@ export function seedCategories(): Category[] {
 
 export function seedActivities(): Activity[] {
   return [
-    { id: TENNIS, categoryId: SPORT, name: "Tennis", color: "copper", targetCount: 2, targetPeriod: "week" },
+    { id: TENNIS, categoryId: SPORT, name: "Tennis", color: "copper", targetCount: 2, targetPeriod: "week", remindAfter: 7, remindPeriod: "day" },
     { id: EGYM, categoryId: SPORT, name: "eGym", color: "tide", targetCount: 4, targetPeriod: "week" },
+  ];
+}
+
+export function seedLabels(): Label[] {
+  return [
+    { id: BUITEN, categoryId: SPORT, name: "Buiten" },
+    { id: WEDSTRIJD, categoryId: SPORT, name: "Wedstrijd" },
   ];
 }
 
@@ -123,5 +157,6 @@ export function seedEntries(today = new Date()): Entry[] {
     activityId: row.activityId,
     date: isoDate(addDays(today, row.offset)),
     count: row.count,
+    ...(row.activityId === TENNIS && row.offset === 0 ? { labelIds: [BUITEN] } : {}),
   }));
 }

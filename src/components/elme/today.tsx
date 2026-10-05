@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { longDay, shiftDay } from "@/lib/elme/dates";
-import { amount, type Activity, type Category } from "@/lib/elme/model";
+import { amount, reminderDue, type Activity, type Category, type Label } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { swatchBg } from "@/components/elme/swatches";
 
-export function Today({ today }: { today: string }) {
+export function Today({ today, signedIn = false }: { today: string; signedIn?: boolean }) {
   const categories = useElme((state) => state.categories);
   const activities = useElme((state) => state.activities);
+  const labels = useElme((state) => state.labels);
   const entries = useElme((state) => state.entries);
   const changeCount = useElme((state) => state.changeCount);
+  const toggleLabel = useElme((state) => state.toggleLabel);
   const moveEntry = useElme((state) => state.moveEntry);
   const removeEntry = useElme((state) => state.removeEntry);
   const setView = useElme((state) => state.setView);
@@ -70,19 +72,21 @@ export function Today({ today }: { today: string }) {
       </div>
 
       {categories.length === 0 ? (
-        <Empty onSettings={() => setView("instellingen")} />
+        <Empty onSettings={() => setView("instellingen")} signedIn={signedIn} />
       ) : (
         categories.map((category) => (
           <CategoryBlock
             key={category.id}
             category={category}
             activities={activities.filter((activity) => activity.categoryId === category.id)}
+            labels={labels.filter((label) => label.categoryId === category.id)}
             selected={selected}
             entries={entries}
             weekStart={weekStart}
             monthStart={monthStart}
             today={today}
             onChange={(activityId, delta) => changeCount(activityId, selected, delta)}
+            onToggleLabel={(activityId, labelId) => toggleLabel(activityId, selected, labelId)}
           />
         ))
       )}
@@ -95,6 +99,7 @@ export function Today({ today }: { today: string }) {
           <ul className="mt-3 flex flex-col gap-3">
             {onDay.map((entry) => {
               const activity = activities.find((item) => item.id === entry.activityId);
+              const picked = labels.filter((label) => entry.labelIds?.includes(label.id)).map((label) => label.name);
               if (!activity) return null;
               return (
                 <li key={entry.id} className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-center">
@@ -102,6 +107,7 @@ export function Today({ today }: { today: string }) {
                     <span className={`size-3 shrink-0 rounded-full ${swatchBg(activity.color)}`} />
                     <span className="truncate">
                       {activity.name} · {amount(entry)}×
+                      {picked.length ? ` · ${picked.join(", ")}` : ""}
                     </span>
                   </p>
                   <label className="block sm:w-48">
@@ -136,22 +142,27 @@ export function Today({ today }: { today: string }) {
 function CategoryBlock({
   category,
   activities,
+  labels,
   selected,
   entries,
   weekStart,
   monthStart,
   today,
   onChange,
+  onToggleLabel,
 }: {
   category: Category;
   activities: Activity[];
+  labels: Label[];
   selected: string;
-  entries: { activityId: string; date: string; count?: number }[];
+  entries: { activityId: string; date: string; count?: number; labelIds?: string[] }[];
   weekStart: string;
   monthStart: string;
   today: string;
   onChange: (activityId: string, delta: number) => void;
+  onToggleLabel: (activityId: string, labelId: string) => void;
 }) {
+  const [openId, setOpenId] = useState<string | null>(null);
   return (
     <section>
       <h2 className="mb-3 flex items-center gap-2 font-display text-2xl">
@@ -163,51 +174,85 @@ function CategoryBlock({
       ) : (
         <ul className="flex flex-col gap-2">
           {activities.map((activity) => {
-            const count = entries
-              .filter((entry) => entry.activityId === activity.id && entry.date === selected)
-              .reduce((sum, entry) => sum + amount(entry), 0);
+            const dayEntries = entries.filter((entry) => entry.activityId === activity.id && entry.date === selected);
+            const count = dayEntries.reduce((sum, entry) => sum + amount(entry), 0);
+            const chosen = new Set(dayEntries.flatMap((entry) => entry.labelIds ?? []));
             const week = entries
               .filter((entry) => entry.activityId === activity.id && entry.date >= weekStart && entry.date <= today)
               .reduce((sum, entry) => sum + amount(entry), 0);
             const month = entries
               .filter((entry) => entry.activityId === activity.id && entry.date >= monthStart && entry.date <= today)
               .reduce((sum, entry) => sum + amount(entry), 0);
+            const due = reminderDue(activity, entries, today);
+            const open = openId === activity.id;
             return (
               <li
                 key={activity.id}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-3 ${count > 0 ? "border-pine bg-pine-soft" : "border-line bg-paper"}`}
+                className={`rounded-lg border px-3 py-3 ${count > 0 ? "border-pine bg-pine-soft" : "border-line bg-paper"}`}
               >
-                <span
-                  className={`flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${count > 0 ? `${swatchBg(activity.color)} text-paper` : "border border-line bg-canvas"}`}
-                >
-                  {count > 0 ? count : ""}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-lg font-semibold">{activity.name}</span>
-                  <span className="block text-sm text-muted">
-                    Deze week {week}× · deze maand {month}×
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${count > 0 ? `${swatchBg(activity.color)} text-paper` : "border border-line bg-canvas"}`}
+                  >
+                    {count > 0 ? count : ""}
                   </span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    aria-label={`Minder ${activity.name}`}
-                    disabled={count === 0}
-                    onClick={() => onChange(activity.id, -1)}
-                    className="flex size-11 items-center justify-center rounded-lg border border-line bg-paper disabled:opacity-40"
-                  >
-                    <Minus className="size-5" />
-                  </button>
-                  <span className="w-8 text-center text-lg font-semibold">{count}</span>
-                  <button
-                    type="button"
-                    aria-label={`Meer ${activity.name}`}
-                    onClick={() => onChange(activity.id, 1)}
-                    className={`flex size-11 items-center justify-center rounded-lg text-paper ${swatchBg(activity.color)}`}
-                  >
-                    <Plus className="size-5" />
-                  </button>
-                </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-lg font-semibold">{activity.name}</span>
+                    <span className="block text-sm text-muted">
+                      Deze week {week}× · deze maand {month}×
+                    </span>
+                    {due ? <span className="block text-sm font-semibold text-copper">Tijd om dit weer te doen</span> : null}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    {labels.length > 0 ? (
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        aria-label={`Labels voor ${activity.name}`}
+                        onClick={() => setOpenId(open ? null : activity.id)}
+                        className="flex size-11 items-center justify-center rounded-lg border border-line bg-paper"
+                      >
+                        <ChevronDown className={`size-5 transition ${open ? "rotate-180" : ""}`} />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-label={`Minder ${activity.name}`}
+                      disabled={count === 0}
+                      onClick={() => onChange(activity.id, -1)}
+                      className="flex size-11 items-center justify-center rounded-lg border border-line bg-paper disabled:opacity-40"
+                    >
+                      <Minus className="size-5" />
+                    </button>
+                    <span className="w-8 text-center text-lg font-semibold">{count}</span>
+                    <button
+                      type="button"
+                      aria-label={`Meer ${activity.name}`}
+                      onClick={() => onChange(activity.id, 1)}
+                      className={`flex size-11 items-center justify-center rounded-lg text-paper ${swatchBg(activity.color)}`}
+                    >
+                      <Plus className="size-5" />
+                    </button>
+                  </span>
+                </div>
+                {open ? (
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3" role="group" aria-label={`Labels ${activity.name}`}>
+                    {labels.map((label) => {
+                      const on = chosen.has(label.id);
+                      return (
+                        <button
+                          key={label.id}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => onToggleLabel(activity.id, label.id)}
+                          className={`h-11 rounded-lg px-3 font-semibold ${on ? "bg-pine text-paper" : "border border-line bg-paper"}`}
+                        >
+                          {label.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </li>
             );
           })}
@@ -217,12 +262,14 @@ function CategoryBlock({
   );
 }
 
-function Empty({ onSettings }: { onSettings: () => void }) {
+function Empty({ onSettings, signedIn }: { onSettings: () => void; signedIn: boolean }) {
   const loadDemo = useElme((state) => state.loadDemo);
   return (
     <div className="rounded-lg border border-line bg-paper p-6">
       <h2 className="font-display text-2xl">Nog geen categorieën</h2>
-      <p className="mt-2 text-muted">Maak een categorie met activiteiten, of laad de demo om te zien hoe tellen werkt.</p>
+      <p className="mt-2 text-muted">
+        {signedIn ? "Maak een categorie met activiteiten die je wilt tellen." : "Maak een categorie met activiteiten, of laad de demo om te zien hoe tellen werkt."}
+      </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
@@ -231,13 +278,15 @@ function Empty({ onSettings }: { onSettings: () => void }) {
         >
           Naar instellingen
         </button>
-        <button
-          type="button"
-          onClick={() => loadDemo()}
-          className="inline-flex h-11 items-center rounded-lg border border-line bg-canvas px-4 font-semibold"
-        >
-          Laad demo
-        </button>
+        {signedIn ? null : (
+          <button
+            type="button"
+            onClick={() => loadDemo()}
+            className="inline-flex h-11 items-center rounded-lg border border-line bg-canvas px-4 font-semibold"
+          >
+            Laad demo
+          </button>
+        )}
       </div>
     </div>
   );

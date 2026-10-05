@@ -1,17 +1,21 @@
 import { useState } from "react";
-import type { SwatchId, TargetPeriod } from "@/lib/elme/model";
+import type { Label, SwatchId, TargetPeriod } from "@/lib/elme/model";
 import { useElme } from "@/lib/elme/store";
 import { SwatchPicker, swatchBg } from "@/components/elme/swatches";
 
 export function Settings() {
   const categories = useElme((state) => state.categories);
   const activities = useElme((state) => state.activities);
+  const labels = useElme((state) => state.labels);
   const addCategory = useElme((state) => state.addCategory);
   const updateCategory = useElme((state) => state.updateCategory);
   const removeCategory = useElme((state) => state.removeCategory);
+  const addLabel = useElme((state) => state.addLabel);
+  const removeLabel = useElme((state) => state.removeLabel);
   const addActivity = useElme((state) => state.addActivity);
   const updateActivity = useElme((state) => state.updateActivity);
   const setTarget = useElme((state) => state.setTarget);
+  const setReminder = useElme((state) => state.setReminder);
   const removeActivity = useElme((state) => state.removeActivity);
 
   const [name, setName] = useState("");
@@ -25,7 +29,7 @@ export function Settings() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-display text-3xl">Instellingen</h2>
-        <p className="text-muted">Een categorie groepeert activiteiten. Per activiteit kun je een doel zetten: dat wordt een lijn in de grafiek.</p>
+        <p className="text-muted">Een categorie groepeert activiteiten en labels. Per activiteit kun je een doel en een herinnering zetten.</p>
       </div>
 
       <form
@@ -112,11 +116,15 @@ export function Settings() {
           name={category.name}
           color={category.color}
           activities={activities.filter((activity) => activity.categoryId === category.id)}
+          labels={labels.filter((label) => label.categoryId === category.id)}
           onSave={(nextName, nextColor) => updateCategory(category.id, nextName, nextColor)}
           onRemove={() => removeCategory(category.id)}
+          onAddLabel={(labelName) => addLabel(category.id, labelName)}
+          onRemoveLabel={removeLabel}
           onAddActivity={(activityName, activityColor) => addActivity(category.id, activityName, activityColor)}
           onSaveActivity={(id, activityName, activityColor) => updateActivity(id, activityName, activityColor)}
           onTarget={setTarget}
+          onReminder={setReminder}
           onRemoveActivity={removeActivity}
         />
       ))}
@@ -129,22 +137,38 @@ function CategoryCard({
   name,
   color,
   activities,
+  labels,
   onSave,
   onRemove,
+  onAddLabel,
+  onRemoveLabel,
   onAddActivity,
   onSaveActivity,
   onTarget,
+  onReminder,
   onRemoveActivity,
 }: {
   id: string;
   name: string;
   color: SwatchId;
-  activities: { id: string; name: string; color: SwatchId; targetCount?: number; targetPeriod?: TargetPeriod }[];
+  activities: {
+    id: string;
+    name: string;
+    color: SwatchId;
+    targetCount?: number;
+    targetPeriod?: TargetPeriod;
+    remindAfter?: number;
+    remindPeriod?: TargetPeriod;
+  }[];
+  labels: Label[];
   onSave: (name: string, color: SwatchId) => void;
   onRemove: () => void;
+  onAddLabel: (name: string) => void;
+  onRemoveLabel: (id: string) => void;
   onAddActivity: (name: string, color: SwatchId) => void;
   onSaveActivity: (id: string, name: string, color: SwatchId) => void;
   onTarget: (id: string, count: number | null, period: TargetPeriod) => void;
+  onReminder: (id: string, count: number | null, period: TargetPeriod) => void;
   onRemoveActivity: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -153,6 +177,7 @@ function CategoryCard({
   const [confirm, setConfirm] = useState(false);
   const [activityName, setActivityName] = useState("");
   const [activityColor, setActivityColor] = useState<SwatchId>(color === "copper" ? "tide" : "copper");
+  const [labelName, setLabelName] = useState("");
 
   return (
     <section className="rounded-lg border border-line bg-paper p-4">
@@ -220,6 +245,51 @@ function CategoryCard({
         </div>
       )}
 
+      <form
+        className="mt-4 flex flex-col gap-2 border-t border-line pt-4 sm:flex-row sm:items-end"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onAddLabel(labelName);
+          setLabelName("");
+        }}
+      >
+        <label className="block min-w-0 flex-1">
+          <span className="mb-1 block text-sm font-semibold">Labels</span>
+          <input
+            value={labelName}
+            onChange={(event) => setLabelName(event.target.value)}
+            maxLength={40}
+            placeholder="Bijvoorbeeld Wedstrijd"
+            className="h-11 w-full rounded-lg border border-line bg-canvas px-3"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!labelName.trim()}
+          className="h-11 rounded-lg border border-line px-4 font-semibold disabled:opacity-40"
+        >
+          Label toevoegen
+        </button>
+      </form>
+      {labels.length > 0 ? (
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {labels.map((label) => (
+            <li key={label.id}>
+              <button
+                type="button"
+                onClick={() => onRemoveLabel(label.id)}
+                className="inline-flex h-11 items-center gap-2 rounded-lg border border-line bg-canvas px-3 font-semibold"
+              >
+                {label.name}
+                <span className="text-copper">Wis</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-muted">Nog geen labels. Die kun je aanvinken als je telt.</p>
+      )}
+
       <ul className="mt-4 flex flex-col gap-3">
         {activities.map((activity) => (
           <ActivityRow
@@ -229,8 +299,11 @@ function CategoryCard({
             color={activity.color}
             targetCount={activity.targetCount}
             targetPeriod={activity.targetPeriod ?? "week"}
+            remindAfter={activity.remindAfter}
+            remindPeriod={activity.remindPeriod ?? "week"}
             onSave={(nextName, nextColor) => onSaveActivity(activity.id, nextName, nextColor)}
             onTarget={(count, period) => onTarget(activity.id, count, period)}
+            onReminder={(count, period) => onReminder(activity.id, count, period)}
             onRemove={() => onRemoveActivity(activity.id)}
           />
         ))}
@@ -274,8 +347,11 @@ function ActivityRow({
   color,
   targetCount,
   targetPeriod,
+  remindAfter,
+  remindPeriod,
   onSave,
   onTarget,
+  onReminder,
   onRemove,
 }: {
   id: string;
@@ -283,8 +359,11 @@ function ActivityRow({
   color: SwatchId;
   targetCount?: number;
   targetPeriod: TargetPeriod;
+  remindAfter?: number;
+  remindPeriod: TargetPeriod;
   onSave: (name: string, color: SwatchId) => void;
   onTarget: (count: number | null, period: TargetPeriod) => void;
+  onReminder: (count: number | null, period: TargetPeriod) => void;
   onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -377,6 +456,37 @@ function ActivityRow({
             <option value="day">per dag</option>
             <option value="week">per week</option>
             <option value="month">per maand</option>
+          </select>
+        </label>
+      </div>
+      <div className="flex w-full flex-wrap items-center gap-2">
+        <label className="text-sm font-semibold text-muted">
+          Herinnering na
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={999}
+            value={remindAfter ?? ""}
+            placeholder="—"
+            aria-label={`Herinnering voor ${name}`}
+            onChange={(event) => {
+              const raw = event.target.value;
+              onReminder(raw === "" ? null : Number(raw), remindPeriod);
+            }}
+            className="ml-2 h-11 w-20 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+          />
+        </label>
+        <label className="text-sm font-semibold text-muted">
+          <span className="sr-only">Periode van de herinnering voor {name}</span>
+          <select
+            value={remindPeriod}
+            onChange={(event) => onReminder(remindAfter ?? null, event.target.value as TargetPeriod)}
+            className="h-11 rounded-lg border border-line bg-canvas px-2 font-semibold text-ink"
+          >
+            <option value="day">dagen</option>
+            <option value="week">weken</option>
+            <option value="month">maanden</option>
           </select>
         </label>
       </div>
