@@ -1,1 +1,7 @@
-PLACEHOLDER_SVG
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="8" fill="#173627"/>
+  <path fill="#fbf8f2" d="M4 6h24v5.5h-8.5V26h-7V11.5H4V6z"/>
+  <rect x="21.5" y="18" width="2.2" height="6" fill="#c4a484" rx="0.4"/>
+  <rect x="24.5" y="15.5" width="2.2" height="8.5" fill="#b08968" rx="0.4"/>
+  <rect x="27.5" y="13" width="2.2" height="11" fill="#9a3f12" rx="0.4"/>
+</svg>
